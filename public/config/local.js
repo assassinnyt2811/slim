@@ -5,7 +5,10 @@ window.config = {
     {
       id: 'local',
       // This must match the proxy location configured for the web server
-      url: 'http://localhost:8008/dcm4chee-arc/aets/DCM4CHEE/rs',
+      url: 'http://172.16.20.185:8080/pacs/rest/MINERVA',
+
+      // url: 'http://localhost:8043/pacs/rest/MINERVA',
+
       write: true
     }
   ],
@@ -95,11 +98,37 @@ window.config = {
       style: {
         stroke: {
           color: [51, 102, 255, 1],
+          lineDash: [10, 10],
           width: 2
         },
         fill: {
           color: [255, 255, 255, 0.2]
         }
+      },
+      style: {
+        stroke: {
+          color: [51, 204, 204, 1],
+          lineDash: [10, 10],
+          width: 2
+        },
+        fill: {
+          color: [255, 255, 255, 0.2]
+        },
+        text: {
+          font: 'bold 12px sans-serif',
+          textAlign: 'start',
+          justify: 'left',
+          text:``,
+          textBaseline: 'top',
+          placement: 'line',
+          fill: {
+            color: [0, 0, 255, 0.8],
+          },
+          backgroundFill: {
+            color: [168, 50, 153, 0],
+          },
+          padding: [0, 0, 0, 0],
+        },
       }
     },
     {
@@ -113,15 +142,29 @@ window.config = {
         schemeDesignator: 'SCT',
         meaning: 'Tumor finding'
       },
-      geometryTypes: ['polygon', 'freehandpolygon'],
+      geometryTypes: ['box', 'polygon', 'freehandpolygon'],
       style: {
         stroke: {
           color: [51, 204, 204, 1],
+          lineDash: [10, 10],
           width: 2
         },
         fill: {
           color: [255, 255, 255, 0.2]
-        }
+        },
+        text: {
+          font: 'bold 12px sans-serif',
+          textAlign: undefined,
+          justify: 'left',
+          text:``,
+          fill: {
+            color: [0, 0, 255, 0.8],
+          },
+          backgroundFill: {
+            color: [168, 50, 153, 0.6],
+          },
+          padding: [0, 0, 0, 0],
+        },
       }
     },
     {

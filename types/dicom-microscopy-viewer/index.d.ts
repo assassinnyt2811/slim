@@ -35,6 +35,22 @@ declare module 'dicom-microscopy-viewer' {
             color: number[]
           }
         }
+        icon?: string
+      }
+      text? : {
+        font: string
+        textAlign: string
+        justify: string
+        text: string
+        textBaseline: string
+        placement: string
+        fill?: {
+          color: number[]
+        }
+        backgroundFill?: {
+          color: number[]
+        }
+        padding?: number[]
       }
     }
 
@@ -71,6 +87,7 @@ declare module 'dicom-microscopy-viewer' {
       getAllROIs (): roi.ROI[]
       removeAllROIs (): void
       getROI (uid: string): roi.ROI
+      viewROI (uid: string): void
       popROI (): roi.ROI
       addROI (item: roi.ROI, styleOptions?: object)
       getROIStyle (uid: string): object

@@ -128,6 +128,22 @@ const _formatRoiStyle = (style: {
     color?: number[]
   }
   radius?: number
+  text? :{
+    font: string
+    textAlign: string
+    justify: string
+    text: string
+    textBaseline: string
+    placement: string
+    fill?: {
+      color: number[]
+    }
+    backgroundFill?: {
+      color: number[]
+    }
+    padding?: number[]
+  },
+  icon?: string
 }): dmv.viewer.ROIStyleOptions => {
   const stroke = {
     color: DEFAULT_ROI_STROKE_COLOR,
@@ -149,19 +165,69 @@ const _formatRoiStyle = (style: {
       fill.color = style.fill.color
     }
   }
-  return {
-    stroke,
-    fill,
-    image: {
-      circle: {
-        radius: style.radius != null
-          ? style.radius
-          : Math.max(5 - stroke.width, 1),
-        stroke,
-        fill
-      }
+
+  const text = {
+    font: 'bold 13px sans-serif',
+    textAlign: 'start',
+    justify: 'right',
+    text: "",
+    textBaseline: 'bottom',
+    overflow: false,
+    fill: {
+      color: [255, 255, 255, 1],
+    },
+    backgroundFill: {
+      color: [168, 50, 153, 0.6],
+    },
+    padding: [2, 2, 2, 2],
+    placement: 'line',
+    offsetX: 0, 
+    offsetY: 0 
+  }
+  if (style.text != null) {
+    if (style.text.font != null) {
+      text.font = style.text.font
+    }
+    if (style.text.textAlign != null) {
+      text.textAlign = style.text.textAlign
+    }
+    if (style.text.justify != null) {
+      text.justify = style.text.justify
+    }
+    if (style.text.text != null) {
+      text.text = style.text.text
+    }
+    if (style.text.fill != null) {
+      text.fill = style.text.fill
+    }
+    if (style.text.backgroundFill != null) {
+      text.backgroundFill = style.text.backgroundFill
+    }
+    if (style.text.padding != null) {
+      text.padding = style.text.padding
+    }
+    if (style.text.textBaseline != null) {
+      text.textBaseline = style.text.textBaseline
+    }
+    if (style.text.placement != null) {
+      text.placement = style.text.placement
     }
   }
+  return {
+    stroke: stroke,
+    fill: fill,
+    text: text,
+    image:  {
+      circle: style.radius != null ? {
+          radius: style.radius != null
+            ? style.radius
+            : Math.max(5 - stroke.width, 1),
+          stroke,
+          fill
+      } : undefined,
+      icon: style.icon != null ? style.icon : undefined
+    }
+  };
 }
 
 const _constructViewers = ({ clients, slide, preload }: {
@@ -375,6 +441,7 @@ interface SlideViewerState {
   selectedMarkup?: string
   selectedRoi?: dmv.roi.ROI
   selectedRoiUIDs: Set<string>
+  showTextByUID: Set<string>
   generatedReport?: dmv.metadata.Comprehensive3DSR
   isLoading: boolean
   isAnnotationModalVisible: boolean
@@ -522,12 +589,15 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
     this.handleAnnotationConfigurationCancellation = this.handleAnnotationConfigurationCancellation.bind(this)
     this.handleAnnotationGeometryTypeSelection = this.handleAnnotationGeometryTypeSelection.bind(this)
     this.handleAnnotationMeasurementActivation = this.handleAnnotationMeasurementActivation.bind(this)
+    this.handleAnnotationTextActivation = this.handleAnnotationTextActivation.bind(this)
     this.handleAnnotationFindingSelection = this.handleAnnotationFindingSelection.bind(this)
     this.handleAnnotationEvaluationSelection = this.handleAnnotationEvaluationSelection.bind(this)
     this.handleAnnotationEvaluationClearance = this.handleAnnotationEvaluationClearance.bind(this)
     this.handleAnnotationConfigurationCompletion = this.handleAnnotationConfigurationCompletion.bind(this)
     this.handleAnnotationSelection = this.handleAnnotationSelection.bind(this)
     this.handleAnnotationVisibilityChange = this.handleAnnotationVisibilityChange.bind(this)
+    this.handleAnnotationAddTextChange = this.handleAnnotationAddTextChange.bind(this)
+    this.handleAnnotationViewROI = this.handleAnnotationViewROI.bind(this)
     this.handleAnnotationGroupVisibilityChange = this.handleAnnotationGroupVisibilityChange.bind(this)
     this.handleAnnotationGroupStyleChange = this.handleAnnotationGroupStyleChange.bind(this)
     this.handleGoTo = this.handleGoTo.bind(this)
@@ -571,6 +641,7 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
 
     this.state = {
       selectedRoiUIDs: new Set(),
+      showTextByUID: new Set(),
       visibleRoiUIDs: new Set(),
       visibleSegmentUIDs: new Set(),
       visibleMappingUIDs: new Set(),
@@ -675,15 +746,25 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
     const client = this.props.clients[
       StorageClasses.ADVANCED_BLENDING_PRESENTATION_STATE
     ]
-    client.searchForInstances({
-      studyInstanceUID: this.props.studyInstanceUID,
-      queryParams: {
-        Modality: 'PR'
-      }
+    client.retrieveStudyMetadata({
+        studyInstanceUID: this.props.studyInstanceUID,
     }).then((matchedInstances): void => {
       if (matchedInstances == null) {
         matchedInstances = []
       }
+      let seachingVR: any[] = []
+      for (let i = 0; i < matchedInstances.length; i++) {
+        let values = matchedInstances[i]['00080060']?.Value ?? [];
+        if (values.length > 0) {
+          for (let j = 0; j < values.length; j++) {
+            if (values[j] === 'PR') {
+              seachingVR.push(matchedInstances[i])
+              break
+            }
+          }
+        }
+      }
+      matchedInstances = seachingVR
       matchedInstances.forEach((rawInstance, index) => {
         const { dataset } = dmv.metadata.formatMetadata(rawInstance)
         const instance = dataset as dmv.metadata.Instance
@@ -946,15 +1027,28 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
   addAnnotations = (): void => {
     console.info('search for Comprehensive 3D SR instances')
     const client = this.props.clients[StorageClasses.COMPREHENSIVE_3D_SR]
-    client.searchForInstances({
-      studyInstanceUID: this.props.studyInstanceUID,
-      queryParams: {
-        Modality: 'SR'
-      }
+    client.retrieveStudyMetadata({
+        studyInstanceUID: this.props.studyInstanceUID,
     }).then((matchedInstances): void => {
       if (matchedInstances == null) {
         matchedInstances = []
       }
+      if (matchedInstances == null) {
+        matchedInstances = []
+      }
+      let seachingVR: any[] = []
+      for (let i = 0; i < matchedInstances.length; i++) {
+        let values = matchedInstances[i]['00080060']?.Value ?? [];
+        if (values.length > 0) {
+          for (let j = 0; j < values.length; j++) {
+            if (values[j] === 'SR') {
+              seachingVR.push(matchedInstances[i])
+              break
+            }
+          }
+        }
+      }
+      matchedInstances = seachingVR
       matchedInstances.forEach(i => {
         const { dataset } = dmv.metadata.formatMetadata(i)
         const instance = dataset as dmv.metadata.Instance
@@ -1080,15 +1174,25 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
     const client = this.props.clients[
       StorageClasses.MICROSCOPY_BULK_SIMPLE_ANNOTATION
     ]
-    client.searchForSeries({
+    client.retrieveStudyMetadata({
       studyInstanceUID: this.props.studyInstanceUID,
-      queryParams: {
-        Modality: 'ANN'
-      }
     }).then((matchedSeries): void => {
       if (matchedSeries == null) {
         matchedSeries = []
       }
+      let seachingVR: any[] = []
+      for (let i = 0; i < matchedSeries.length; i++) {
+        let values = matchedSeries[i]['00080060']?.Value ?? [];
+        if (values.length > 0) {
+          for (let j = 0; j < values.length; j++) {
+            if (values[j] === 'ANN') {
+              seachingVR.push(matchedSeries[i])
+              break
+            }
+          }
+        }
+      }
+      matchedSeries = seachingVR
       matchedSeries.forEach(s => {
         const { dataset } = dmv.metadata.formatMetadata(s)
         const series = dataset as dmv.metadata.Series
@@ -1177,15 +1281,25 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
   addSegmentations = (): void => {
     console.info('search for Segmentation instances')
     const client = this.props.clients[StorageClasses.SEGMENTATION]
-    client.searchForSeries({
+    client.retrieveStudyMetadata({
       studyInstanceUID: this.props.studyInstanceUID,
-      queryParams: {
-        Modality: 'SEG'
-      }
     }).then((matchedSeries): void => {
       if (matchedSeries == null) {
         matchedSeries = []
       }
+      let seachingVR: any[] = []
+      for (let i = 0; i < matchedSeries.length; i++) {
+        let values = matchedSeries[i]['00080060']?.Value ?? [];
+        if (values.length > 0) {
+          for (let j = 0; j < values.length; j++) {
+            if (values[j] === 'SEG') {
+              seachingVR.push(matchedSeries[i])
+              break
+            }
+          }
+        }
+      }
+      matchedSeries = seachingVR
       matchedSeries.forEach((s, i) => {
         const { dataset } = dmv.metadata.formatMetadata(s)
         const series = dataset as dmv.metadata.Series
@@ -1257,15 +1371,25 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
   addParametricMaps = (): void => {
     console.info('search for Parametric Map instances')
     const client = this.props.clients[StorageClasses.PARAMETRIC_MAP]
-    client.searchForSeries({
+    client.retrieveStudyMetadata({
       studyInstanceUID: this.props.studyInstanceUID,
-      queryParams: {
-        Modality: 'OT'
-      }
     }).then((matchedSeries): void => {
       if (matchedSeries == null) {
         matchedSeries = []
       }
+      let seachingVR: any[] = []
+      for (let i = 0; i < matchedSeries.length; i++) {
+        let values = matchedSeries[i]['00080060']?.Value ?? [];
+        if (values.length > 0) {
+          for (let j = 0; j < values.length; j++) {
+            if (values[j] === 'OT') {
+              seachingVR.push(matchedSeries[i])
+              break
+            }
+          }
+        }
+      }
+      matchedSeries = seachingVR
       matchedSeries.forEach(s => {
         const { dataset } = dmv.metadata.formatMetadata(s)
         const series = dataset as dmv.metadata.Series
@@ -1407,6 +1531,7 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
       const key = _buildKey(selectedFinding)
       const style = this.getRoiStyle(key)
       this.volumeViewer.addROI(roi, style)
+      console.log("Draw set style")
       this.setState(state => {
         const visibleRoiUIDs = state.visibleRoiUIDs
         visibleRoiUIDs.add(roi.uid)
@@ -1430,12 +1555,14 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
       })
       this.setState({
         selectedRoiUIDs: new Set([selectedRoi.uid]),
+        showTextByUID: new Set(),
         selectedRoi: selectedRoi,
         isSelectedRoiModalVisible: true
       })
     } else {
       this.setState({
         selectedRoiUIDs: new Set(),
+        showTextByUID: new Set(),
         selectedRoi: undefined,
         isSelectedRoiModalVisible: false
       })
@@ -1445,7 +1572,8 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
   handleRoiSelectionCancellation (): void {
     this.setState({
       isSelectedRoiModalVisible: false,
-      selectedRoiUIDs: new Set()
+      selectedRoiUIDs: new Set(),
+      showTextByUID: new Set(),
     })
   }
 
@@ -1769,6 +1897,21 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
   }
 
   /**
+   * Handler that gets called when measurements have been selected for
+   * annotation.
+   */
+  handleAnnotationTextActivation (event: any): void {
+    const active: boolean = event.target.checked
+    if (active) {
+      this.setState({ selectedMarkup: 'text' })
+      // this.setState({ selectedMarkup: undefined })
+
+    } else {
+      this.setState({ selectedMarkup: undefined })
+    }
+  }
+
+  /**
    * Handler that gets called when an evaluation has been selected for an
    * annotation.
    *
@@ -1956,8 +2099,11 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
     const finding = this.state.selectedFinding
     const geometryType = this.state.selectedGeometryType
     const markup = this.state.selectedMarkup
+
+    const marker = "arrow";
+
     if (geometryType !== undefined && finding !== undefined) {
-      this.volumeViewer.activateDrawInteraction({ geometryType, markup })
+      this.volumeViewer.activateDrawInteraction({ geometryType, markup, marker })
       this.setState({
         isAnnotationModalVisible: false,
         isRoiDrawingActive: true
@@ -2066,10 +2212,31 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
     console.debug('encode Imaging Measurements')
     const imagingMeasurements: dcmjs.sr.valueTypes.ContainerContentItem[] = []
     for (let i = 0; i < rois.length; i++) {
-      const roi = rois[i]
-      if (!this.state.visibleRoiUIDs.has(roi.uid)) {
+      if (this.state.visibleRoiUIDs.has(rois[i].uid)) {
+        console.log(rois[i]);
         continue
       }
+      if (rois[i].measurements.length === 0) {
+        continue;
+      }
+      const measurement_converts = [
+        new dcmjs.sr.valueTypes.NumContentItem({
+        name: new dcmjs.sr.coding.CodedConcept({
+          value: rois[i].measurements[0].ConceptNameCodeSequence[0].CodeValue,
+          schemeDesignator: rois[i].measurements[0].ConceptNameCodeSequence[0].schemeDesignator,
+          meaning: rois[i].measurements[0].ConceptNameCodeSequence[0].meaning,
+        }),
+        relationshipType: rois[i].measurements[0].RelationshipType,
+        value: rois[i].measurements[0].MeasuredValueSequence[0].FloatingPointValue ?? 0,
+        unit: new dcmjs.sr.coding.CodedConcept({
+          value: rois[i].measurements[0].MeasuredValueSequence[0].MeasurementUnitsCodeSequence[0].CodeValue,
+          schemeDesignator: rois[i].measurements[0].MeasuredValueSequence[0].MeasurementUnitsCodeSequence[0].schemeDesignator,
+          meaning: rois[i].measurements[0].MeasuredValueSequence[0].MeasurementUnitsCodeSequence[0].meaning,
+        }),
+      })]
+
+      const roi = rois[i]
+      
       let findingType = roi.evaluations.find(
         (item: dcmjs.sr.valueTypes.ContentItem) => {
           return item.ConceptNameCodeSequence[0].CodeValue === '121071'
@@ -2106,7 +2273,7 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
             return item.ConceptNameCodeSequence[0].CodeValue !== '121071'
           }
         ),
-        measurements: roi.measurements
+        measurements: [] //measurement_converts // [] //roi.measurements
       })
       const measurements = group as dcmjs.sr.valueTypes.ContainerContentItem[]
       measurements[0].ContentTemplateSequence = [{
@@ -2229,7 +2396,10 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
    */
   handleAnnotationSelection ({ roiUID }: { roiUID: string }): void {
     console.log(`selected ROI ${roiUID}`)
-    this.setState({ selectedRoiUIDs: new Set([roiUID]) })
+    this.setState({ 
+      selectedRoiUIDs: new Set([roiUID]),
+      showTextByUID: new Set(),
+    })
     this.volumeViewer.getAllROIs().forEach((roi) => {
       let style = {}
       if (roi.uid === roiUID) {
@@ -2274,11 +2444,72 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
         selectedRoiUIDs.delete(roiUID)
         const visibleRoiUIDs = state.visibleRoiUIDs
         visibleRoiUIDs.delete(roiUID)
-        return { visibleRoiUIDs, selectedRoiUIDs }
+        const showTextByUID = state.showTextByUID
+        if (showTextByUID.has(roiUID)) {
+          showTextByUID.delete(roiUID)
+        }
+        return { visibleRoiUIDs, selectedRoiUIDs, showTextByUID }
       })
       this.volumeViewer.setROIStyle(roiUID, {})
     }
   }
+
+    /**
+   * Handle toggling of annotation visibility, i.e., whether a given
+   * annotation should be either displayed or hidden by the viewer.
+   */
+    handleAnnotationAddTextChange ({ roiUID, isShow }: {
+      roiUID: string
+      isShow: boolean
+    }): void {
+      if (this.state.visibleRoiUIDs.has(roiUID)) {
+        if (isShow) {
+          console.info(`show Text ROI ${roiUID}`)
+          const roi = this.volumeViewer.getROI(roiUID)
+          const key = _getRoiKey(roi)
+          const styleMatch = this.getRoiStyle(key)
+          if (styleMatch.text) {
+            styleMatch.text.text=(roi.evaluations[0] as dcmjs.sr.valueTypes.CodeContentItem).ConceptCodeSequence[0].CodeMeaning
+            if (styleMatch.text.fill)
+              styleMatch.text.fill.color = [77, 137, 99, 1]
+          }
+          this.volumeViewer.setROIStyle(roi.uid, styleMatch)
+          this.setState(state => {
+            const visibleRoiUIDs = state.visibleRoiUIDs
+            const showTextByUID = state.showTextByUID
+            showTextByUID.add(roi.uid)
+            return { visibleRoiUIDs, showTextByUID }
+          })
+        } else {
+          console.info(`Hide Text ROI ${roiUID}`)
+          const roi = this.volumeViewer.getROI(roiUID)
+          const key = _getRoiKey(roi)
+          const styleMatch = this.getRoiStyle(key)
+          if (styleMatch.text) {
+            styleMatch.text.text = ''
+            if (styleMatch.text.fill)
+              styleMatch.text.fill.color = [255, 255, 255, 0]
+          }
+          this.volumeViewer.setROIStyle(roi.uid, styleMatch)
+          this.setState(state => {
+            const selectedRoiUIDs = state.selectedRoiUIDs
+            const visibleRoiUIDs = state.visibleRoiUIDs
+            const showTextByUID = state.showTextByUID
+            if (showTextByUID.has(roiUID)) {
+              showTextByUID.delete(roiUID)
+            }
+            return { visibleRoiUIDs, selectedRoiUIDs, showTextByUID }
+          })
+        }
+      }
+      
+    }
+
+    handleAnnotationViewROI({ roiUID }: { roiUID: string }): void {
+      if (this.state.visibleRoiUIDs.has(roiUID)) {
+        this.volumeViewer.viewROI(roiUID);
+      }
+    }
 
   /**
    * Handle toggling of annotation group visibility, i.e., whether a given
@@ -2851,9 +3082,12 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
         <AnnotationList
           rois={rois}
           selectedRoiUIDs={this.state.selectedRoiUIDs}
+          selectedTextRoiUID={this.state.showTextByUID}
           visibleRoiUIDs={this.state.visibleRoiUIDs}
           onSelection={this.handleAnnotationSelection}
           onVisibilityChange={this.handleAnnotationVisibilityChange}
+          onAddTextChange={this.handleAnnotationAddTextChange}
+          onViewROIClick={this.handleAnnotationViewROI}
         />
       )
     }
@@ -2900,7 +3134,7 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
       )
     ]
 
-    const selectedFinding = this.state.selectedFinding
+    const selectedFinding = this.state.selectedFinding 
     if (selectedFinding !== undefined) {
       const key = _buildKey(selectedFinding)
       this.evaluationOptions[key].forEach(evaluation => {
@@ -2951,6 +3185,15 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
           key='annotation-measurement'
         >
           measure
+        </Checkbox>
+      )
+
+      annotationConfigurations.push(
+        <Checkbox
+          onChange={this.handleAnnotationTextActivation}
+          key='annotation-text'
+        >
+          text annotation
         </Checkbox>
       )
     }
@@ -3393,6 +3636,7 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
           <div
             style={{
               height: `calc(100% - ${toolbarHeight})`,
+              backgroundColor: 'black',
               overflow: 'hidden',
               cursor: cursor
             }}

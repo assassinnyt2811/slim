@@ -586,6 +586,13 @@ class AnnotationGroupItem extends React.Component<AnnotationGroupItemProps, Anno
                 checkedChildren={<FaEye />}
                 unCheckedChildren={<FaEyeSlash />}
               />
+              <Switch
+                size='small'
+                onChange={this.handleVisibilityChange}
+                checked={this.props.isVisible}
+                checkedChildren={<FaEye />}
+                unCheckedChildren={<FaEyeSlash />}
+              />
               <Popover
                 placement='left'
                 content={settings}

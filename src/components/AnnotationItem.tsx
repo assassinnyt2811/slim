@@ -1,7 +1,7 @@
 import React from 'react'
 import * as dmv from 'dicom-microscopy-viewer'
 import * as dcmjs from 'dcmjs'
-import { Menu, Space, Switch } from 'antd'
+import { Button, Menu, Space, Switch } from 'antd'
 import { FaEye, FaEyeSlash } from 'react-icons/fa'
 
 import Description from './Description'
@@ -10,9 +10,17 @@ interface AnnotationItemProps {
   roi: dmv.roi.ROI
   index: number
   isVisible: boolean
+  isShowText: boolean
   onVisibilityChange: ({ roiUID, isVisible }: {
     roiUID: string
     isVisible: boolean
+  }) => void
+  onAddTextChange: ({ roiUID, isShow}: {
+    roiUID: string
+    isShow: boolean
+  }) => void
+  onViewROIClick: ({roiUID}:{
+    roiUID: string
   }) => void
 }
 
@@ -23,6 +31,29 @@ class AnnotationItem extends React.Component<AnnotationItemProps, {}> {
   constructor (props: AnnotationItemProps) {
     super(props)
     this.handleVisibilityChange = this.handleVisibilityChange.bind(this)
+    this.handleAddTextChange = this.handleAddTextChange.bind(this)
+    this.handleViewRoiClick = this.handleViewRoiClick.bind(this)
+
+  }
+
+  handleViewRoiClick(
+    event: React.MouseEvent<HTMLButtonElement>
+  ): void {
+    this.props.onViewROIClick({
+      roiUID: this.props.roi.uid
+    })
+  }
+  
+
+
+  handleAddTextChange (
+    checked: boolean,
+    event: React.MouseEvent<HTMLButtonElement>
+  ): void {
+    this.props.onAddTextChange({
+      roiUID: this.props.roi.uid,
+      isShow: checked
+    })
   }
 
   handleVisibilityChange (
@@ -106,6 +137,22 @@ class AnnotationItem extends React.Component<AnnotationItemProps, {}> {
             checkedChildren={<FaEye />}
             unCheckedChildren={<FaEyeSlash />}
           />
+          <Switch
+            style={{marginTop: '5px'}}
+            size='small'
+            onChange={this.handleAddTextChange}
+            checked={this.props.isShowText}
+            checkedChildren={<FaEye />}
+            unCheckedChildren={<FaEyeSlash />}
+          />
+          <Button 
+          type="primary"
+          size='small'
+          style={{marginTop: '5px', borderRadius: '5px', fontSize: '10px'}}
+          onClick={this.handleViewRoiClick}
+          >
+            View
+            </Button>
         </div>
         <Menu.Item
           style={{ height: '100%', paddingLeft: '3px' }}

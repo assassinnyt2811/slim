@@ -8,10 +8,18 @@ import AnnotationItem from './AnnotationItem'
 interface AnnotationListProps {
   rois: dmv.roi.ROI[]
   selectedRoiUIDs: Set<string>
+  selectedTextRoiUID: Set<string>
   visibleRoiUIDs: Set<string>
   onVisibilityChange: ({ roiUID, isVisible }: {
     roiUID: string
     isVisible: boolean
+  }) => void
+  onAddTextChange: ({ roiUID, isShow}: {
+    roiUID: string
+    isShow: boolean
+  }) => void
+  onViewROIClick: ({roiUID}:{
+    roiUID: string
   }) => void
   onSelection: ({ roiUID }: { roiUID: string }) => void
 }
@@ -53,7 +61,10 @@ class AnnotationList extends React.Component<AnnotationListProps, {}> {
         roi={roi}
         index={index}
         isVisible={this.props.visibleRoiUIDs.has(roi.uid)}
+        isShowText={this.props.selectedTextRoiUID.has(roi.uid)}
         onVisibilityChange={this.props.onVisibilityChange}
+        onAddTextChange={this.props.onAddTextChange}
+        onViewROIClick={this.props.onViewROIClick}
       />
     ))
 
