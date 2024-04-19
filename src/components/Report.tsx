@@ -266,6 +266,8 @@ class MeasurementReport {
 
   public ROIs: dmv.roi.ROI[] = []
 
+  public trackingIdentifier: string | undefined
+
   constructor (report: dmv.metadata.Comprehensive3DSR) {
     let items = findContentItemsByName({
       content: report.ContentSequence,
@@ -370,6 +372,34 @@ class MeasurementReport {
         items[0] as unknown as dcmjs.sr.valueTypes.TextContentItem
       )
       this.PersonObserverLoginName = personLoginNameItem.TextValue
+    }
+
+    items = findContentItemsByName({
+      content: report.ContentSequence,
+      name: new dcmjs.sr.coding.CodedConcept({
+        value: '126010',
+        schemeDesignator: 'DCM',
+        meaning: "Imaging Measurements"
+      })
+    })
+    if (items.length > 0) {
+      if (items[0].ContentSequence !== undefined) {
+        if ((items[0].ContentSequence as unknown as Array<dcmjs.sr.valueTypes.ContentSequence>).length > 0)
+        {
+          if (items[0].ContentSequence[0].ContentSequence !== undefined) {
+            const trackingIdentifierItem = items[0].ContentSequence[0].ContentSequence as unknown as Array<dcmjs.sr.valueTypes.TextContentItem>;
+            if (trackingIdentifierItem !== undefined) {
+              for (let i = 0; i < trackingIdentifierItem.length; i++) {
+                if (trackingIdentifierItem[i].ConceptNameCodeSequence[0].CodeMeaning === "Tracking Identifier")
+                {
+                  this.trackingIdentifier = trackingIdentifierItem[i].TextValue
+                  break
+                }
+              }
+            }
+          }
+        }
+      }
     }
 
     items = findContentItemsByName({

@@ -171,7 +171,7 @@ const _formatRoiStyle = (style: {
     textAlign: 'start',
     justify: 'right',
     text: "",
-    textBaseline: 'bottom',
+    textBaseline: 'top',
     overflow: false,
     fill: {
       color: [255, 255, 255, 1],
@@ -511,6 +511,7 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
   }
 
   private roiStyles: {[key: string]: dmv.viewer.ROIStyleOptions} = {}
+  private roiTitleDesc: {[key: string]: string} = {}
 
   private readonly selectionColor: number[] = [140, 184, 198]
 
@@ -1050,6 +1051,7 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
       }
       matchedInstances = seachingVR
       matchedInstances.forEach(i => {
+        console.log(i)
         const { dataset } = dmv.metadata.formatMetadata(i)
         const instance = dataset as dmv.metadata.Instance
         if (instance.SOPClassUID === StorageClasses.COMPREHENSIVE_3D_SR) {
@@ -1059,9 +1061,14 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
             seriesInstanceUID: instance.SeriesInstanceUID,
             sopInstanceUID: instance.SOPInstanceUID
           }).then((retrievedInstance): void => {
+            console.log("Check before run roi " + instance.SOPInstanceUID)
+            
+
             const data = dcmjs.data.DicomMessage.readFile(retrievedInstance)
             const { dataset } = dmv.metadata.formatMetadata(data.dict)
             const report = dataset as unknown as dmv.metadata.Comprehensive3DSR
+            console.log("Check after take dataset roi " + instance.SOPInstanceUID)
+
             /*
              * Perform a couple of checks to ensure the document content of the
              * report fullfils the requirements of the application.
@@ -1089,11 +1096,16 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
               return
             }
 
+            console.log("Check before add roi ")
             const content = new MeasurementReport(report)
             content.ROIs.forEach(roi => {
               console.info(`add ROI "${roi.uid}"`)
               const scoord3d = roi.scoord3d
               const image = this.props.slide.volumeImages[0]
+
+              console.log(content)
+              
+              this.roiTitleDesc[roi.uid] = content.trackingIdentifier ?? ''
               if (scoord3d.frameOfReferenceUID === image.FrameOfReferenceUID) {
                 /*
                  * ROIs may get assigned new UIDs upon re-rendering of the
@@ -1531,7 +1543,11 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
       const key = _buildKey(selectedFinding)
       const style = this.getRoiStyle(key)
       this.volumeViewer.addROI(roi, style)
+
+      // SET TEXT FOR NEW ROI HERE
+      this.roiTitleDesc[roi.uid] = '{"id":1,"title":"TEST TITLE", "desc":"TEST DESCRIPTION"}'
       console.log("Draw set style")
+
       this.setState(state => {
         const visibleRoiUIDs = state.visibleRoiUIDs
         visibleRoiUIDs.add(roi.uid)
@@ -2212,28 +2228,31 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
     console.debug('encode Imaging Measurements')
     const imagingMeasurements: dcmjs.sr.valueTypes.ContainerContentItem[] = []
     for (let i = 0; i < rois.length; i++) {
-      if (this.state.visibleRoiUIDs.has(rois[i].uid)) {
+      if (!this.state.visibleRoiUIDs.has(rois[i].uid)) {
         console.log(rois[i]);
         continue
       }
+      
+      let roi_measurements: string | any[] | undefined = [];
       if (rois[i].measurements.length === 0) {
-        continue;
+        roi_measurements = []
+      } else {
+        roi_measurements = [
+          new dcmjs.sr.valueTypes.NumContentItem({
+          name: new dcmjs.sr.coding.CodedConcept({
+            value: rois[i].measurements[0].ConceptNameCodeSequence[0].CodeValue,
+            schemeDesignator: rois[i].measurements[0].ConceptNameCodeSequence[0].schemeDesignator,
+            meaning: rois[i].measurements[0].ConceptNameCodeSequence[0].meaning,
+          }),
+          relationshipType: rois[i].measurements[0].RelationshipType,
+          value: rois[i].measurements[0].MeasuredValueSequence[0].FloatingPointValue ?? 0,
+          unit: new dcmjs.sr.coding.CodedConcept({
+            value: rois[i].measurements[0].MeasuredValueSequence[0].MeasurementUnitsCodeSequence[0].CodeValue,
+            schemeDesignator: rois[i].measurements[0].MeasuredValueSequence[0].MeasurementUnitsCodeSequence[0].schemeDesignator,
+            meaning: rois[i].measurements[0].MeasuredValueSequence[0].MeasurementUnitsCodeSequence[0].meaning,
+          }),
+        })]
       }
-      const measurement_converts = [
-        new dcmjs.sr.valueTypes.NumContentItem({
-        name: new dcmjs.sr.coding.CodedConcept({
-          value: rois[i].measurements[0].ConceptNameCodeSequence[0].CodeValue,
-          schemeDesignator: rois[i].measurements[0].ConceptNameCodeSequence[0].schemeDesignator,
-          meaning: rois[i].measurements[0].ConceptNameCodeSequence[0].meaning,
-        }),
-        relationshipType: rois[i].measurements[0].RelationshipType,
-        value: rois[i].measurements[0].MeasuredValueSequence[0].FloatingPointValue ?? 0,
-        unit: new dcmjs.sr.coding.CodedConcept({
-          value: rois[i].measurements[0].MeasuredValueSequence[0].MeasurementUnitsCodeSequence[0].CodeValue,
-          schemeDesignator: rois[i].measurements[0].MeasuredValueSequence[0].MeasurementUnitsCodeSequence[0].schemeDesignator,
-          meaning: rois[i].measurements[0].MeasuredValueSequence[0].MeasurementUnitsCodeSequence[0].meaning,
-        }),
-      })]
 
       const roi = rois[i]
       
@@ -2255,7 +2274,7 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
       const group = new dcmjs.sr.templates.PlanarROIMeasurementsAndQualitativeEvaluations({
         trackingIdentifier: new dcmjs.sr.templates.TrackingIdentifier({
           uid: roi.properties.trackingUID ?? roi.uid,
-          identifier: `ROI #${i + 1}`
+          identifier: this.roiTitleDesc[roi.uid] ?? `ROI #${i + 1}`
         }),
         referencedRegion: new dcmjs.sr.contentItems.ImageRegion3D({
           graphicType: roi.scoord3d.graphicType,
@@ -2273,7 +2292,7 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
             return item.ConceptNameCodeSequence[0].CodeValue !== '121071'
           }
         ),
-        measurements: [] //measurement_converts // [] //roi.measurements
+        measurements: roi_measurements.length === 0 ? [] : roi_measurements
       })
       const measurements = group as dcmjs.sr.valueTypes.ContainerContentItem[]
       measurements[0].ContentTemplateSequence = [{
@@ -2468,8 +2487,22 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
           const roi = this.volumeViewer.getROI(roiUID)
           const key = _getRoiKey(roi)
           const styleMatch = this.getRoiStyle(key)
+          const text_matching = this.roiTitleDesc[roi.uid] 
+          console.log(this.roiTitleDesc)
+          let temp_text = ''
+          let show_text = ''
+          try {
+            show_text = text_matching
+            // temp_text = JSON.parse(text_matching);
+            // if (typeof temp_text === 'object') {
+            //   if ((temp_text as { title?: string }).title !== undefined)
+            //     show_text = (temp_text as { title?: string }).title ?? '';
+            // }
+          } catch (error) {
+            show_text = this.roiTitleDesc[roi.uid]
+          }
           if (styleMatch.text) {
-            styleMatch.text.text=(roi.evaluations[0] as dcmjs.sr.valueTypes.CodeContentItem).ConceptCodeSequence[0].CodeMeaning
+            styleMatch.text.text = show_text
             if (styleMatch.text.fill)
               styleMatch.text.fill.color = [77, 137, 99, 1]
           }
@@ -3086,8 +3119,8 @@ class SlideViewer extends React.Component<SlideViewerProps, SlideViewerState> {
           visibleRoiUIDs={this.state.visibleRoiUIDs}
           onSelection={this.handleAnnotationSelection}
           onVisibilityChange={this.handleAnnotationVisibilityChange}
-          onAddTextChange={this.handleAnnotationAddTextChange}
-          onViewROIClick={this.handleAnnotationViewROI}
+          childOnAddTextChange={this.handleAnnotationAddTextChange}
+          childOnViewROIClick={this.handleAnnotationViewROI}
         />
       )
     }

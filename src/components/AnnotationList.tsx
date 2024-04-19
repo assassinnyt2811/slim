@@ -14,11 +14,11 @@ interface AnnotationListProps {
     roiUID: string
     isVisible: boolean
   }) => void
-  onAddTextChange: ({ roiUID, isShow}: {
+  childOnAddTextChange: ({ roiUID, isShow}: {
     roiUID: string
     isShow: boolean
   }) => void
-  onViewROIClick: ({roiUID}:{
+  childOnViewROIClick: ({roiUID}:{
     roiUID: string
   }) => void
   onSelection: ({ roiUID }: { roiUID: string }) => void
@@ -50,6 +50,7 @@ class AnnotationList extends React.Component<AnnotationListProps, {}> {
     }
   }
 
+
   handleMenuItemSelection (object: any): void {
     this.props.onSelection({ roiUID: object.key })
   }
@@ -63,8 +64,8 @@ class AnnotationList extends React.Component<AnnotationListProps, {}> {
         isVisible={this.props.visibleRoiUIDs.has(roi.uid)}
         isShowText={this.props.selectedTextRoiUID.has(roi.uid)}
         onVisibilityChange={this.props.onVisibilityChange}
-        onAddTextChange={this.props.onAddTextChange}
-        onViewROIClick={this.props.onViewROIClick}
+        onAddTextChange={this.props.childOnAddTextChange}
+        onViewROIClick={this.props.childOnViewROIClick}
       />
     ))
 
